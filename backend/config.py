@@ -8,9 +8,17 @@ load_dotenv()
 @dataclass
 class Config:
     """Configuration settings for the RAG system"""
-    # Anthropic API settings
+    # AI API settings - can use either Anthropic or OpenAI-compatible (DeepSeek)
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    
+    # DeepSeek API settings (OpenAI-compatible)
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    
+    # Choose AI provider: "anthropic" or "deepseek"
+    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "deepseek")
     
     # Embedding model settings
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"

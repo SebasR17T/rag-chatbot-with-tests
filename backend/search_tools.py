@@ -62,12 +62,32 @@ class CourseSearchTool(Tool):
             Formatted search results or error message
         """
         
+        # Input validation
+        if query is None:
+            return "Error: Query cannot be None. Please provide a search query."
+        
+        if not isinstance(query, str):
+            return f"Error: Query must be a string, got {type(query).__name__}."
+        
+        if not query.strip():
+            return "Error: Query cannot be empty. Please provide a search query."
+        
+        # Parameter validation
+        if course_name is not None and not isinstance(course_name, str):
+            return f"Error: Course name must be a string, got {type(course_name).__name__}."
+        
+        if lesson_number is not None and not isinstance(lesson_number, int):
+            return f"Error: Lesson number must be an integer, got {type(lesson_number).__name__}."
+        
         # Use the vector store's unified search interface
-        results = self.store.search(
-            query=query,
-            course_name=course_name,
-            lesson_number=lesson_number
-        )
+        try:
+            results = self.store.search(
+                query=query,
+                course_name=course_name,
+                lesson_number=lesson_number
+            )
+        except Exception as e:
+            return f"Search error: {str(e)}"
         
         # Handle errors
         if results.error:
@@ -75,6 +95,7 @@ class CourseSearchTool(Tool):
         
         # Handle empty results
         if results.is_empty():
+            self.last_sources = []  # Explicitly clear sources for empty results
             filter_info = ""
             if course_name:
                 filter_info += f" in course '{course_name}'"
@@ -113,6 +134,132 @@ class CourseSearchTool(Tool):
         
         return "\n\n".join(formatted)
 
+
+class CourseOutlineTool(Tool):
+    """Tool for retrieving complete course outlines with lessons"""
+    
+    def __init__(self, vector_store: VectorStore):
+        self.store = vector_store
+        self.last_sources = []
+    
+    def get_tool_definition(self) -> Dict[str, Any]:
+        """Return Anthropic tool definition for this tool"""
+        return {
+            "name": "get_course_outline",
+            "description": "Get complete course outline including course title, link, and all lessons with their numbers and titles",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "course_title": {
+                        "type": "string",
+                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction', 'Build Rich-Context AI Apps')"
+                    }
+                },
+                "required": ["course_title"]
+            }
+        }
+    
+    def execute(self, course_title: str) -> str:
+        """
+        Execute the course outline tool to get course structure.
+        
+        Args:
+            course_title: Course title to get outline for
+            
+        Returns:
+            Formatted course outline or error message
+        """
+        
+        # Get course metadata from the vector store
+        try:
+            course_data = self._get_course_metadata(course_title)
+            
+            if not course_data:
+                return f"No course found matching '{course_title}'. Please check the course title and try again."
+            
+            # Format and return the outline
+            return self._format_course_outline(course_data)
+            
+        except Exception as e:
+            return f"Error retrieving course outline: {str(e)}"
+    
+    def _get_course_metadata(self, course_title: str) -> Optional[Dict[str, Any]]:
+        """Get course metadata from the vector store"""
+        
+        # Search for course metadata using the vector store's search functionality
+        # This will help us find the course even with partial matches
+        results = self.store.search(
+            query=f"course outline {course_title}",
+            course_name=course_title,
+            limit=50  # Get more results to ensure we capture all lessons
+        )
+        
+        if results.error or results.is_empty():
+            return None
+        
+        # Extract course metadata from search results
+        course_data = {
+            'title': None,
+            'link': None,
+            'lessons': []
+        }
+        
+        # Process metadata to extract course information
+        for doc, metadata in zip(results.documents, results.metadata):
+            course_title_meta = metadata.get('course_title')
+            course_link = metadata.get('course_link', '')
+            lesson_number = metadata.get('lesson_number')
+            lesson_title = metadata.get('lesson_title', '')
+            
+            # Set course title and link (use first match)
+            if not course_data['title'] and course_title_meta:
+                course_data['title'] = course_title_meta
+                course_data['link'] = course_link
+            
+            # Add lesson information if available
+            if lesson_number is not None and lesson_title:
+                lesson_info = {
+                    'number': lesson_number,
+                    'title': lesson_title
+                }
+                
+                # Avoid duplicates
+                if lesson_info not in course_data['lessons']:
+                    course_data['lessons'].append(lesson_info)
+        
+        # Sort lessons by number
+        course_data['lessons'].sort(key=lambda x: x['number'])
+        
+        return course_data if course_data['title'] else None
+    
+    def _format_course_outline(self, course_data: Dict[str, Any]) -> str:
+        """Format course outline for display"""
+        
+        outline_parts = []
+        
+        # Course title
+        outline_parts.append(f"**Course Title:** {course_data['title']}")
+        
+        # Course link (if available)
+        if course_data.get('link'):
+            outline_parts.append(f"**Course Link:** {course_data['link']}")
+        
+        # Lessons
+        if course_data['lessons']:
+            outline_parts.append(f"**Total Lessons:** {len(course_data['lessons'])}")
+            outline_parts.append("\n**Course Outline:**")
+            
+            for lesson in course_data['lessons']:
+                outline_parts.append(f"  {lesson['number']}. {lesson['title']}")
+        else:
+            outline_parts.append("**Lessons:** No lesson information available")
+        
+        # Set sources for UI
+        self.last_sources = [course_data['title']]
+        
+        return "\n".join(outline_parts)
+
+
 class ToolManager:
     """Manages available tools for the AI"""
     
@@ -135,9 +282,20 @@ class ToolManager:
     def execute_tool(self, tool_name: str, **kwargs) -> str:
         """Execute a tool by name with given parameters"""
         if tool_name not in self.tools:
-            return f"Tool '{tool_name}' not found"
+            return f"Tool '{tool_name}' not found. Available tools: {', '.join(self.tools.keys())}"
         
-        return self.tools[tool_name].execute(**kwargs)
+        try:
+            return self.tools[tool_name].execute(**kwargs)
+        except TypeError as e:
+            # Handle missing required parameters gracefully
+            error_msg = str(e)
+            if "required positional argument" in error_msg:
+                return f"Error: Missing required parameter for tool '{tool_name}'. {error_msg}"
+            return f"Error executing tool '{tool_name}': {error_msg}"
+        except ValueError as e:
+            return f"Error: Invalid parameter value for tool '{tool_name}': {str(e)}"
+        except Exception as e:
+            return f"Unexpected error in tool '{tool_name}': {str(e)}"
     
     def get_last_sources(self) -> list:
         """Get sources from the last search operation"""

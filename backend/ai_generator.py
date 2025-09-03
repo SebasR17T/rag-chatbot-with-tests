@@ -1,17 +1,40 @@
 import anthropic
+from openai import OpenAI
 from typing import List, Optional, Dict, Any
 
 class AIGenerator:
     """Handles interactions with Anthropic's Claude API for generating responses"""
     
     # Static system prompt to avoid rebuilding on each call
-    SYSTEM_PROMPT = """ You are an AI assistant specialized in course materials and educational content with access to a comprehensive search tool for course information.
+    SYSTEM_PROMPT = """ You are an AI assistant specialized in course materials and educational content with access to comprehensive search tools for course information.
+
+Available Tools:
+1. **search_course_content** - For detailed course content, lesson materials, and specific educational topics
+2. **get_course_outline** - For course structure, lesson lists, course titles, and course links
+
+Tool Selection Guidelines:
+- **Course outline/structure queries**: Use get_course_outline for questions about:
+  - Course outlines, lesson lists, course structure
+  - "What is the outline of [course]?"
+  - "What lessons are in [course]?"
+  - "Show me the structure of [course]"
+- **Content-specific queries**: Use search_course_content for questions about:
+  - Specific lesson content, detailed explanations, examples
+  - "What is covered in lesson X?"
+  - "Explain concept Y from [course]"
 
 Search Tool Usage:
-- Use the search tool **only** for questions about specific course content or detailed educational materials
 - **One search per query maximum**
+- Choose the most appropriate tool based on the query type
 - Synthesize search results into accurate, fact-based responses
 - If search yields no results, state this clearly without offering alternatives
+
+Response Protocol for Course Outlines:
+- When using get_course_outline, always include:
+  - **Course title** (exact title from the tool)
+  - **Course link** (if available)
+  - **Complete lesson list** with lesson numbers and titles
+  - **Total number of lessons**
 
 Response Protocol:
 - **General knowledge questions**: Answer using existing knowledge without searching
@@ -19,7 +42,6 @@ Response Protocol:
 - **No meta-commentary**:
  - Provide direct answers only — no reasoning process, search explanations, or question-type analysis
  - Do not mention "based on the search results"
-
 
 All responses must be:
 1. **Brief, Concise and focused** - Get to the point quickly
@@ -29,16 +51,28 @@ All responses must be:
 Provide only the direct answer to what was asked.
 """
     
-    def __init__(self, api_key: str, model: str):
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, api_key: str, model: str, provider: str = "anthropic", base_url: str = None):
+        self.provider = provider
         self.model = model
         
-        # Pre-build base API parameters
-        self.base_params = {
-            "model": self.model,
-            "temperature": 0,
-            "max_tokens": 800
-        }
+        if provider == "anthropic":
+            self.client = anthropic.Anthropic(api_key=api_key)
+            # Pre-build base API parameters for Anthropic
+            self.base_params = {
+                "model": self.model,
+                "temperature": 0,
+                "max_tokens": 800
+            }
+        elif provider == "deepseek":
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+            # Pre-build base API parameters for DeepSeek/OpenAI
+            self.base_params = {
+                "model": self.model,
+                "temperature": 0,
+                "max_tokens": 800
+            }
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
     
     def generate_response(self, query: str,
                          conversation_history: Optional[str] = None,
@@ -76,8 +110,25 @@ Provide only the direct answer to what was asked.
             api_params["tools"] = tools
             api_params["tool_choice"] = {"type": "auto"}
         
-        # Get response from Claude
-        response = self.client.messages.create(**api_params)
+        # Get response based on provider
+        if self.provider == "anthropic":
+            response = self.client.messages.create(**api_params)
+        elif self.provider == "deepseek":
+            # Convert to OpenAI format
+            openai_messages = [{"role": "system", "content": system_content}] + api_params["messages"]
+            openai_params = {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": 0,
+                "max_tokens": 800
+            }
+            response = self.client.chat.completions.create(**openai_params)
+            # Convert response format
+            class MockResponse:
+                def __init__(self, content_text, stop_reason="stop"):
+                    self.content = [type('obj', (object,), {'text': content_text})]
+                    self.stop_reason = stop_reason
+            response = MockResponse(response.choices[0].message.content)
         
         # Handle tool execution if needed
         if response.stop_reason == "tool_use" and tool_manager:

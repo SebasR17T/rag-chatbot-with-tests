@@ -5,7 +5,7 @@ const API_URL = '/api';
 let currentSessionId = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton, clearButton, totalCourses, courseTitles;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMessages = document.getElementById('chatMessages');
     chatInput = document.getElementById('chatInput');
     sendButton = document.getElementById('sendButton');
+    clearButton = document.getElementById('clearButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
     
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     // Chat functionality
     sendButton.addEventListener('click', sendMessage);
+    clearButton.addEventListener('click', clearConversation);
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
@@ -42,6 +44,44 @@ function setupEventListeners() {
 
 
 // Chat Functions
+async function clearConversation() {
+    try {
+        // If we have a session, try to clear it on the backend
+        if (currentSessionId) {
+            const response = await fetch(`${API_URL}/clear-session`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ session_id: currentSessionId })
+            });
+            
+            if (!response.ok) {
+                console.error('Failed to clear conversation on backend');
+                // Continue anyway to clear the UI
+            } else {
+                console.log('Conversation cleared successfully on backend');
+            }
+        }
+        
+        // Always clear the UI regardless of backend response
+        chatMessages.innerHTML = '';
+        
+        // Create a new session for the next conversation
+        createNewSession();
+        
+        console.log('UI cleared and new session created');
+        
+    } catch (error) {
+        console.error('Error clearing conversation:', error);
+        
+        // Even if there's an error, still clear the UI
+        chatMessages.innerHTML = '';
+        createNewSession();
+        console.log('UI cleared despite error');
+    }
+}
+
 async function sendMessage() {
     const query = chatInput.value.trim();
     if (!query) return;

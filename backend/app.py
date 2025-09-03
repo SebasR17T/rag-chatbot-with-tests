@@ -51,6 +51,15 @@ class CourseStats(BaseModel):
     total_courses: int
     course_titles: List[str]
 
+class ClearSessionRequest(BaseModel):
+    """Request model for clearing a session"""
+    session_id: str
+
+class ClearSessionResponse(BaseModel):
+    """Response model for clearing a session"""
+    success: bool
+    message: str
+
 # API Endpoints
 
 @app.post("/api/query", response_model=QueryResponse)
@@ -71,7 +80,11 @@ async def query_documents(request: QueryRequest):
             session_id=session_id
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Query error: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
 @app.get("/api/courses", response_model=CourseStats)
 async def get_course_stats():
@@ -84,6 +97,18 @@ async def get_course_stats():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/clear-session", response_model=ClearSessionResponse)
+async def clear_session(request: ClearSessionRequest):
+    """Clear a conversation session"""
+    try:
+        rag_system.session_manager.clear_session(request.session_id)
+        return ClearSessionResponse(
+            success=True,
+            message="Session cleared successfully"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear session: {str(e)}")
 
 @app.on_event("startup")
 async def startup_event():

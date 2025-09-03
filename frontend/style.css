@@ -15,6 +15,8 @@
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --border-color: #334155;
+    --danger-color: #dc2626;
+    --danger-hover: #b91c1c;
     --user-message: #2563eb;
     --assistant-message: #374151;
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
@@ -391,6 +393,57 @@ header h1 {
 #sendButton:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Clear Chat Button - Professional style */
+.sidebar-action-button {
+    width: 100%;
+    background-color: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.75rem 1rem;
+    transition: all 0.2s ease-in-out;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    margin: 0.5rem 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-action-button:focus {
+    outline: none;
+    border-color: var(--danger-color);
+    box-shadow: 0 0 0 3px var(--danger-color, 0.2);
+}
+
+.sidebar-action-button:hover {
+    background-color: var(--surface-hover);
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-action-button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-action-button svg {
+    width: 16px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+.sidebar-action-button .button-text {
+    margin-left: 0.5rem;
 }
 
 /* Loading Animation */
